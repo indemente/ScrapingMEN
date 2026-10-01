@@ -2,13 +2,14 @@ name: Scraper Sistema Maestro
 
 on:
   schedule:
-    # ⚠️ IMPORTANTE: GitHub usa hora UTC. 
-    # Si estás en Colombia (UTC-5), debes sumar 5 horas.
-    - cron: '0 13 * * *'  # Se ejecuta a las 8:00 AM (Hora Colombia)
-    - cron: '0 18 * * *'  # Se ejecuta a la 1:00 PM (Hora Colombia)
-    - cron: '0 23 * * *'  # Se ejecuta a las 6:00 PM (Hora Colombia)
+    # ⏰ 8:00 AM, 1:00 PM, 6:00 PM (Colombia) = 13, 18, 23 (UTC)
+    - cron: '0 13,18,23 * * *'
     
   workflow_dispatch: # Permite ejecutarlo manualmente
+
+# 👇 ESTO SOLUCIONA EL ERROR 403 DEL KEEP-ALIVE 👇
+permissions:
+  contents: write
 
 jobs:
   scrape:
