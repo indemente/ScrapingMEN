@@ -4,8 +4,6 @@ on:
   schedule:
     # ⚠️ IMPORTANTE: GitHub usa hora UTC. 
     # Si estás en Colombia (UTC-5), debes sumar 5 horas.
-    # Ejemplo: 8:00 AM Colombia = 13:00 UTC
-    
     - cron: '0 13 * * *'  # Se ejecuta a las 8:00 AM (Hora Colombia)
     - cron: '0 18 * * *'  # Se ejecuta a la 1:00 PM (Hora Colombia)
     - cron: '0 23 * * *'  # Se ejecuta a las 6:00 PM (Hora Colombia)
@@ -41,3 +39,11 @@ jobs:
           AREAS_BUSQUEDA: ${{ secrets.AREAS_BUSQUEDA }}
         run: |
           python main.py
+
+      - name: 🔄 Keep-alive (Mantener repositorio activo)
+        if: always()
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git commit --allow-empty -m "Auto keep-alive"
+          git push
