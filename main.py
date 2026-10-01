@@ -53,17 +53,14 @@ class Vacante:
 # ============================================================
 
 async def extraer_detalle_vacante(page, vacante_idx: int, total_vacantes: int) -> dict:
-    """Extrae los detalles de una vacante abriendo el modal Ver detalle"""
     detalle = {"establecimiento": "", "sede": "", "barrio": "", "direccion": "", "calendario": ""}
 
     try:
         vacante_divs = await page.query_selector_all("div.vacante")
-
         if vacante_idx >= len(vacante_divs):
             return detalle
 
         div = vacante_divs[vacante_idx]
-
         all_links = await div.query_selector_all("a")
         ver_detalle = None
         for link in all_links:
@@ -77,9 +74,7 @@ async def extraer_detalle_vacante(page, vacante_idx: int, total_vacantes: int) -
 
         await ver_detalle.scroll_into_view_if_needed()
         await asyncio.sleep(0.5)
-
         await ver_detalle.click()
-
         await asyncio.sleep(10)
 
         page_text = await page.evaluate('document.body.innerText')
@@ -91,33 +86,26 @@ async def extraer_detalle_vacante(page, vacante_idx: int, total_vacantes: int) -
                 if not line:
                     continue
 
-                if 'Establecimiento educativo:' in line:
+                if 'Establecimiento educativo:' in line or 'Establecimiento:' in line:
                     detalle['establecimiento'] = line.split(':')[-1].strip()
-                elif 'Establecimiento:' in line:
-                    detalle['establecimiento'] = line.split(':')[-1].strip()
-
                 if line.startswith('Sede:') or 'Sede:' in line:
                     detalle['sede'] = line.split(':')[-1].strip()
-
                 if 'Barrio:' in line:
                     detalle['barrio'] = line.split(':')[-1].strip()
-
-                if 'Dirección:' in line or 'Direcci' in line and ':' in line:
+                if 'Dirección:' in line or ('Direcci' in line and ':' in line):
                     detalle['direccion'] = line.split(':')[-1].strip()
-
                 if 'Calendario' in line and ':' in line:
                     detalle['calendario'] = line.split(':')[-1].strip()
 
         await page.keyboard.press("Escape")
         await asyncio.sleep(1)
-    except Exception as e:
+    except Exception:
         pass
 
     return detalle
 
 
 async def extraer_vacantes(page, browser) -> list:
-    """Extrae todas las vacantes de la pagina actual"""
     vacantes = []
     vacante_divs = await page.query_selector_all("div.vacante")
 
@@ -159,7 +147,7 @@ async def extraer_vacantes(page, browser) -> list:
                 direccion=detalle.get('direccion', ''),
                 calendario=detalle.get('calendario', '')
             ))
-        except:
+        except Exception:
             pass
     return vacantes
 
@@ -189,12 +177,12 @@ async def hacer_click_next(page) -> bool:
         }''')
         await asyncio.sleep(tiempo_humano(0.3, 0.8))
         return True
-    except:
+    except Exception:
         return False
 
 
 # ============================================================
-# BÚSQUEDA POR ÁREA (una sola área)
+# BÚSQUEDA POR ÁREA
 # ============================================================
 
 async def buscar_por_area(nombre_area: str) -> dict:
@@ -217,7 +205,6 @@ async def buscar_por_area(nombre_area: str) -> dict:
             viewport={'width': 1920, 'height': 1080},
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         )
-
         page = await context.new_page()
 
         print(f"\n>>> Buscando: {nombre_area}")
@@ -239,14 +226,14 @@ async def buscar_por_area(nombre_area: str) -> dict:
 
             try:
                 await select_area.wait_for(state="visible", timeout=60000)
-            except:
+            except Exception:
                 print("ERROR: No se cargó dropdown Area - reintentando...")
                 await asyncio.sleep(5)
                 try:
                     await page.reload()
                     await asyncio.sleep(5)
                     await select_area.wait_for(state="visible", timeout=60000)
-                except:
+                except Exception:
                     print("ERROR: No se pudo cargar el dropdown Area")
                     await browser.close()
                     return {"error": "No se cargó el dropdown", "area": nombre_area}
@@ -269,17 +256,14 @@ async def buscar_por_area(nombre_area: str) -> dict:
             }''')
 
             areas = [(str(i["idx"]), i["texto"]) for i in opciones if "/" not in i["texto"] and i["texto"] != "Área"]
-
             area_encontrada = None
             nombre_area_norm = remove_accents(nombre_area.lower().strip())
 
-            # 1) Coincidencia EXACTA primero
             for idx, nombre in areas:
                 if remove_accents(nombre.lower().strip()) == nombre_area_norm:
                     area_encontrada = (idx, nombre)
                     break
 
-            # 2) Fallback: coincidencia PARCIAL (contiene)
             if not area_encontrada:
                 for idx, nombre in areas:
                     if nombre_area_norm in remove_accents(nombre.lower()):
@@ -288,15 +272,8 @@ async def buscar_por_area(nombre_area: str) -> dict:
 
             if not area_encontrada:
                 print(f"!!! Área '{nombre_area}' no encontrada")
-                print(f"!!! Áreas disponibles ({len(areas)}):")
-                for a in areas:
-                    print(f"      - {a[1]}")
                 await browser.close()
-                return {
-                    "error": f"Área '{nombre_area}' no encontrada",
-                    "area": nombre_area,
-                    "areas_disponibles": [a[1] for a in areas]
-                }
+                return {"error": f"Área '{nombre_area}' no encontrada", "area": nombre_area}
 
             idx, nombre = area_encontrada
             print(f">>> Área encontrada: {nombre}")
@@ -318,18 +295,12 @@ async def buscar_por_area(nombre_area: str) -> dict:
             await asyncio.sleep(tiempo_humano(3, 5))
 
             count = await page.locator("div.vacante").count()
-
             if count == 0:
                 print(f">>> Sin vacantes para el área: {nombre}")
                 await browser.close()
-                return {
-                    "area": nombre,
-                    "total": 0,
-                    "vacantes": []
-                }
+                return {"area": nombre, "total": 0, "vacantes": []}
 
             print(f">>> [{count} vacantes en página 1]")
-
             vacantes = await extraer_vacantes(page, browser)
             total_area = len(vacantes)
             print(f">>> +{len(vacantes)} vacantes extraídas")
@@ -366,17 +337,12 @@ async def buscar_por_area(nombre_area: str) -> dict:
             print(f"ERROR en buscar_por_area({nombre_area}): {e}")
             try:
                 await browser.close()
-            except:
+            except Exception:
                 pass
             return {"error": str(e), "area": nombre_area}
 
 
-# ============================================================
-# BÚSQUEDA POR MÚLTIPLES ÁREAS
-# ============================================================
-
 async def buscar_multiples_areas(areas: list) -> list:
-    """Ejecuta buscar_por_area() para cada área de la lista."""
     resultados = []
     for i, area in enumerate(areas, 1):
         area = area.strip()
@@ -399,11 +365,11 @@ async def buscar_multiples_areas(areas: list) -> list:
 
 
 # ============================================================
-# ENVÍO DE CORREO
+# ENVÍO DE CORREO CONSOLIDADO (SOLO VALLE DEL CAUCA)
 # ============================================================
 
-def enviar_email(area: str, vacantes: list) -> None:
-    """Envía un correo con las vacantes encontradas usando SMTP de Gmail."""
+def enviar_email_consolidado(resultados: list) -> None:
+    """Envía un único correo con el resumen y las vacantes del Valle del Cauca."""
     smtp_user = os.getenv("SMTP_USER")
     smtp_pass = os.getenv("SMTP_PASS")
     email_to = os.getenv("EMAIL_TO", smtp_user)
@@ -412,25 +378,69 @@ def enviar_email(area: str, vacantes: list) -> None:
         print("[email] Faltan credenciales SMTP_USER o SMTP_PASS. No se envía correo.")
         return
 
+    todas_vacantes_valle = []
+    resumen_areas = {}
+
+    # 1. FILTRAR: Solo nos quedamos con las vacantes del Valle del Cauca
+    for res in resultados:
+        area = res.get("area", "Desconocida")
+        if "error" in res:
+            resumen_areas[area] = f"Error: {res['error']}"
+            continue
+            
+        vacantes_originales = res.get("vacantes", [])
+        # Condición: que "valle" esté en el departamento o en la secretaría
+        vacantes_valle = [
+            v for v in vacantes_originales 
+            if "valle" in v.get('departamento', '').lower() or "valle" in v.get('secretaria', '').lower()
+        ]
+        
+        if len(vacantes_valle) > 0:
+            todas_vacantes_valle.extend(vacantes_valle)
+            resumen_areas[area] = len(vacantes_valle)
+
+    total_general = len(todas_vacantes_valle)
+
+    # 2. CONDICIÓN: Si no hay vacantes del Valle, NO enviar nada.
+    if total_general == 0:
+        print("[email] ⏭️ No se encontraron vacantes en Valle del Cauca. No se envía correo.")
+        return
+
+    # 3. Construir el HTML del correo
     filas = ""
-    for v in vacantes:
+    for v in todas_vacantes_valle:
         filas += f"""
         <tr>
-          <td style="padding:6px;border:1px solid #ccc;">{v.get('cargo','')}</td>
-          <td style="padding:6px;border:1px solid #ccc;">{v.get('municipio','')}</td>
-          <td style="padding:6px;border:1px solid #ccc;">{v.get('secretaria','')}</td>
-          <td style="padding:6px;border:1px solid #ccc;">{v.get('establecimiento','')}</td>
-          <td style="padding:6px;border:1px solid #ccc;">{v.get('sede','')}</td>
-          <td style="padding:6px;border:1px solid #ccc;">{v.get('cierre','')}</td>
+          <td style="padding:6px;border:1px solid #ccc;">{v.get('area', '')}</td>
+          <td style="padding:6px;border:1px solid #ccc;">{v.get('cargo', '')}</td>
+          <td style="padding:6px;border:1px solid #ccc;">{v.get('municipio', '')}</td>
+          <td style="padding:6px;border:1px solid #ccc;">{v.get('secretaria', '')}</td>
+          <td style="padding:6px;border:1px solid #ccc;">{v.get('establecimiento', '')}</td>
+          <td style="padding:6px;border:1px solid #ccc;">{v.get('sede', '')}</td>
+          <td style="padding:6px;border:1px solid #ccc;">{v.get('cierre', '')}</td>
         </tr>"""
+
+    resumen_html = "<ul>"
+    for area, cantidad in resumen_areas.items():
+        if isinstance(cantidad, int):
+            resumen_html += f"<li><strong>{area}</strong>: {cantidad} vacante(s)</li>"
+        else:
+            resumen_html += f"<li><strong>{area}</strong>: {cantidad}</li>"
+    resumen_html += "</ul>"
 
     html = f"""
     <html><body style="font-family:Arial,sans-serif;">
-    <h2 style="color:#1a4d80;">Nuevas vacantes — Área: {area}</h2>
-    <p>Se encontraron <strong>{len(vacantes)}</strong> vacante(s) nueva(s).</p>
-    <table style="border-collapse:collapse;font-size:13px;">
+    <h2 style="color:#1a4d80;">📢 Nuevas Vacantes en Valle del Cauca</h2>
+    <p>Se encontraron un total de <strong style="color:#d9534f; font-size:18px;">{total_general}</strong> vacante(s) nueva(s) en el Valle del Cauca.</p>
+    
+    <h3 style="color:#333;">Resumen por Área:</h3>
+    {resumen_html}
+
+    <h3 style="color:#333;">Detalle de Vacantes:</h3>
+    <table style="border-collapse:collapse;font-size:13px; width:100%;">
       <thead>
         <tr style="background:#f0f0f0;">
+          <th style="padding:6px;border:1px solid #ccc;">Área</th>
           <th style="padding:6px;border:1px solid #ccc;">Cargo</th>
           <th style="padding:6px;border:1px solid #ccc;">Municipio</th>
           <th style="padding:6px;border:1px solid #ccc;">Secretaría</th>
@@ -441,12 +451,12 @@ def enviar_email(area: str, vacantes: list) -> None:
       </thead>
       <tbody>{filas}</tbody>
     </table>
-    <p style="color:#888;font-size:12px;">Generado automáticamente por Scraper Maestro — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    <p style="color:#888;font-size:12px; margin-top:20px;">Generado automáticamente por Scraper Maestro — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
     </body></html>
     """
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"[Sistema Maestro] {len(vacantes)} vacantes nuevas en {area}"
+    msg["Subject"] = f"[Valle del Cauca] {total_general} vacantes nuevas en Sistema Maestro"
     msg["From"] = smtp_user
     msg["To"] = email_to
     msg.attach(MIMEText(html, "html", "utf-8"))
@@ -456,7 +466,7 @@ def enviar_email(area: str, vacantes: list) -> None:
             server.starttls()
             server.login(smtp_user, smtp_pass)
             server.sendmail(smtp_user, [email_to], msg.as_string())
-        print(f"[email] ✅ Correo enviado a {email_to}")
+        print(f"[email] ✅ Correo consolidado enviado a {email_to} con {total_general} vacantes.")
     except Exception as e:
         print(f"[email] ❌ Error al enviar correo: {e}")
 
@@ -466,15 +476,6 @@ def enviar_email(area: str, vacantes: list) -> None:
 # ============================================================
 
 async def main():
-    """
-    Uso:
-      python scraper_area_chat.py "Tecnología e informática,Primaria"
-      python scraper_area_chat.py "Tecnología e informática" "Primaria"
-
-    Sin argumentos, lee la variable de entorno AREAS_BUSQUEDA
-    (formato: "Área1,Área2,Área3").
-    """
-    # 1. Determinar áreas
     if len(sys.argv) >= 2:
         areas_raw = ",".join(sys.argv[1:])
     else:
@@ -484,7 +485,6 @@ async def main():
 
     if not areas:
         print("ERROR: No se especificó ninguna área.")
-        print('Uso: python scraper_area_chat.py "Tecnología e informática,Primaria"')
         return
 
     print("=" * 60)
@@ -494,34 +494,33 @@ async def main():
         print(f"  • {a}")
     print()
 
-    # 2. Ejecutar scraping
+    # 1. Ejecutar scraping
     resultados = await buscar_multiples_areas(areas)
 
-    # 3. Resumen + envío de correos
+    # 2. Resumen en consola (Filtrado)
     print("\n" + "=" * 60)
-    print("RESUMEN FINAL")
+    print("RESUMEN FINAL (Filtrado: Solo Valle del Cauca)")
     print("=" * 60)
 
-    resumen = {}
     for res in resultados:
         area = res.get("area", "?")
         if "error" in res:
             print(f"  ❌ {area}: ERROR — {res['error']}")
-            resumen[area] = {"total": 0, "error": res["error"]}
             continue
-        total = res.get("total", 0)
-        print(f"  ✅ {area}: {total} vacantes")
-        resumen[area] = {"total": total}
+        
+        vacantes_originales = res.get("vacantes", [])
+        vacantes_valle = [v for v in vacantes_originales if "valle" in v.get('departamento', '').lower() or "valle" in v.get('secretaria', '').lower()]
+        
+        print(f"  ✅ {area}: {len(vacantes_valle)} vacantes en Valle del Cauca (de {len(vacantes_originales)} totales)")
 
-        if total > 0:
-            enviar_email(area, res.get("vacantes", []))
+    # 3. Enviar correo (Solo si hay al menos 1 vacante del Valle)
+    enviar_email_consolidado(resultados)
 
-    # 4. JSON completo
+    # 4. JSON completo (para logs de GitHub Actions)
     print("\nJSON_OUTPUT_START")
     print(json.dumps({
         "fecha_ejecucion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         "areas": [r.get("area") for r in resultados],
-        "resumen": resumen,
         "resultados": resultados
     }, ensure_ascii=False, indent=2))
     print("JSON_OUTPUT_END")
